@@ -37,5 +37,5 @@ Chrome-расширение для получения ключа аккаунт�
 
 - Бот: [@GPTSubsBot](https://t.me/GPTSubsBot)
 - Сайт: [gptsubs.com](https://gptsubs.com)
-- Отзывы: [@GPTSubsReviews](https://t.me/GPTSubsReviews)
+- Отзывы: [@GPTSubsReviews](https://t.me/GPTSubsReviewsLive)
 - Поддержка: [@GPTSubs_support](https://t.me/GPTSubs_support)
