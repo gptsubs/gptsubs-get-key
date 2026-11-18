@@ -1,14 +1,20 @@
 {
   "manifest_version": 3,
   "name": "GPTSubs — Get Key",
-  "version": "2.0.0",
-  "description": "Ключ активации подписки GPTSubs в один клик: Claude, X Premium, ChatGPT. Данные не сохраняются и не отправляются.",
+  "version": "2.1.0",
+  "description": "Ключ активации подписки GPTSubs в один клик: ChatGPT, Grok + Cursor, Claude. Данные не сохраняются и не отправляются.",
   "homepage_url": "https://gptsubs.com/",
-  "permissions": ["cookies", "clipboardWrite", "activeTab", "scripting", "storage"],
+  "permissions": [
+    "cookies",
+    "clipboardWrite",
+    "activeTab",
+    "scripting",
+    "storage"
+  ],
   "host_permissions": [
     "https://claude.ai/*",
-    "https://x.com/*",
-    "https://twitter.com/*",
+    "https://grok.com/*",
+    "https://*.grok.com/*",
     "https://chatgpt.com/*",
     "https://chat.openai.com/*"
   ],
