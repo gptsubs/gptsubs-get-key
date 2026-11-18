@@ -1,8 +1,8 @@
 // GPTSubs — Get Key
 // Одно расширение для получения ключа под разные сервисы:
 //   • Claude  — читает cookie sessionKey с claude.ai
-//   • X       — получает obfuscated_id для X Premium через API x.com
-//   • ChatGPT — заготовка (в разработке)
+//   • Grok    — копирует все cookie grok.com в формате Cookie Editor (нужен sso) для Grok + Cursor
+//   • ChatGPT — читает /api/auth/session на вкладке chatgpt.com
 // Ничего не сохраняется и никуда не отправляется — всё происходит локально в окне.
 
 // ── Значки в стиле сайта ──
@@ -66,32 +66,36 @@ const SERVICES = {
     getter: getClaudeKey,
   },
 
-  x: {
-    name: 'X Premium',
-    tag: 'Get Key · X Premium',
-    accent: 'var(--brand)',
-    accentHi: 'var(--brand-hi)',
-    hosts: ['x.com', 'twitter.com'],
-    site: 'x.com',
-    siteUrl: 'https://x.com',
+  grok: {
+    name: 'Grok + Cursor',
+    tag: 'Get Key · Grok · Cursor',
+    accent: 'var(--grok)',
+    accentHi: '#c7d2fe',
+    hosts: ['grok.com'],
+    site: 'grok.com',
+    siteUrl: 'https://grok.com',
+    noWarn: true,   // cookie читаются напрямую — вкладка grok.com не нужна, только вход в аккаунт
+    mask: true,     // cookie дают доступ к аккаунту — прячем под «Показать»
+    download: true, // cookie бывает много — можно отдать файлом
+    fileName: 'grok-cookies.txt',
+    loadingText: 'Читаем cookie…',
+    okMsg: 'Готово! Cookie grok.com скопированы',
     steps: [
-      ['Войдите в аккаунт X', 'Откройте расширение на вкладке <em>x.com</em>'],
-      ['Нажмите «Получить ID»', 'ID получим и скопируем автоматически'],
-      ['Отправьте ID боту', 'Вставьте его в чат <em>@GPTSubsBot</em>'],
+      ['Войдите в аккаунт Grok', 'На <em>grok.com</em> в этом браузере'],
+      ['Нажмите «Получить cookie»', 'Скопируем все cookie grok.com, как Cookie Editor'],
+      ['Вставьте в поле «Cookie / sso»', 'На странице активации из <em>@GPTSubsBot</em>'],
     ],
-    warn: 'Расширение работает на вкладке <b>x.com</b>. <a href="https://x.com" target="_blank" rel="noopener">Перейти на x.com →</a>',
-    keyLabel: 'Ваш ID для бота',
-    getText: 'Получить ID',
-    copyText: 'Скопировать ID ещё раз',
-    mask: false, // ID короткий и не чувствительный — показываем сразу
-    requireTab: true, // API-запрос выполняется в контексте вкладки x.com
+    warn: 'Войдите в аккаунт на <b>grok.com</b>. <a href="https://grok.com" target="_blank" rel="noopener">Перейти на grok.com →</a>',
+    keyLabel: 'Cookie grok.com (JSON)',
+    getText: 'Получить cookie',
+    copyText: 'Скопировать ещё раз',
     note: {
       cls: 'note',
       icon: svg('<path d="M12 3 5 6v5c0 4.5 3 8.3 7 10 4-1.7 7-5.5 7-10V6l-7-3z"/><path d="m9 12 2 2 4-4"/>'),
-      html: 'Данные не сохраняются и никуда не отправляются',
+      html: 'Данные не сохраняются и никуда не отправляются. Не публикуйте cookie',
     },
     links: [LINKS.bot],
-    getter: getXId,
+    getter: getGrokCookies,
   },
 
   chatgpt: {
@@ -106,6 +110,7 @@ const SERVICES = {
     share: true,      // показываем кнопку «Отправить в @GPTSubsBot»
     shareBotDirect: true, // сессия большая — ссылку с текстом Telegram отбивает (400), поэтому просто открываем чат бота
     download: true,
+    fileName: 'chatgpt-session.txt',
     okMsg: 'Готово! Данные session скопированы',
     loadingText: 'Получаем сессию…',
     steps: [
@@ -323,7 +328,7 @@ btnGet.addEventListener('click', async () => {
   }
 
   btnGet.disabled = true;
-  btnGet.innerHTML = '<span class="spin"></span>' + `<span>${cfg.loadingText || (cfg === SERVICES.x ? 'Получаем ID…' : 'Читаем ключ…')}</span>`;
+  btnGet.innerHTML = '<span class="spin"></span>' + `<span>${cfg.loadingText || 'Читаем ключ…'}</span>`;
   keyCard.classList.remove('show');
   btnCopy.classList.remove('show');
   btnDownload.classList.remove('show');
@@ -390,7 +395,7 @@ btnDownload.addEventListener('click', () => {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = 'chatgpt-session.txt';
+  a.download = cfg.fileName || 'gptsubs-key.txt';
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
@@ -418,48 +423,33 @@ async function getClaudeKey() {
   return { value: cookie.value };
 }
 
-async function getXId() {
-  const cookies = await chrome.cookies.getAll({ domain: 'x.com' });
-  const ct0 = cookies.find(c => c.name === 'ct0')?.value;
-  if (!ct0) return { error: 'Войдите в аккаунт на X (Twitter)' };
-
-  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-  if (!tab || !(tab.url || '').match(/(^https:\/\/x\.com)|(^https:\/\/twitter\.com)/)) {
-    return { error: 'Откройте вкладку x.com и попробуйте снова' };
+async function getGrokCookies() {
+  // Как «Export → JSON» в Cookie Editor: все cookie grok.com и его поддоменов.
+  // chrome.cookies видит и httpOnly-cookie (sso), поэтому вкладка grok.com не нужна.
+  const all = await chrome.cookies.getAll({ domain: 'grok.com' });
+  const now = Date.now() / 1000;
+  const live = (all || []).filter(c => c.session || !c.expirationDate || c.expirationDate > now);
+  if (!live.some(c => c.name === 'sso' && c.value)) {
+    return { error: 'Войдите в аккаунт на grok.com и попробуйте снова' };
   }
-
-  const results = await chrome.scripting.executeScript({
-    target: { tabId: tab.id },
-    func: async (csrfToken) => {
-      try {
-        const response = await fetch(
-          'https://x.com/i/api/graphql/hpmba_y_wbVdTHLrufZfQg/InAppPurchaseObfuscatedIdRedeem',
-          {
-            method: 'POST',
-            headers: {
-              'Authorization': 'Bearer AAAAAAAAAAAAAAAAAAAAANRILgAAAAAAnNwIzUejRCOuH5E6I8xnZz4puTs%3D1Zv7ttfk8LF81IUq16cHjhLTvJu4FA33AGWWjCpTnA',
-              'Content-Type': 'application/x-www-form-urlencoded',
-              'X-Csrf-Token': csrfToken,
-              'X-Twitter-Auth-Type': 'OAuth2Session',
-              'X-Twitter-Active-User': 'yes',
-            },
-            credentials: 'include',
-          }
-        );
-        if (!response.ok) return { error: 'HTTP ' + response.status };
-        const data = await response.json();
-        if (data.errors?.length) return { error: data.errors[0].message };
-        const id = data?.data?.in_app_purchase_obfuscated_id_redeem?.obfuscated_id;
-        if (!id) return { error: 'ID не найден в ответе' };
-        return { id };
-      } catch (e) { return { error: e.message }; }
-    },
-    args: [ct0],
+  const sameSite = { no_restriction: 'no_restriction', lax: 'lax', strict: 'strict' };
+  const out = live.map(c => {
+    const o = {
+      domain: c.domain,
+      hostOnly: c.hostOnly,
+      httpOnly: c.httpOnly,
+      name: c.name,
+      path: c.path,
+      sameSite: sameSite[c.sameSite] || null,
+      secure: c.secure,
+      session: c.session,
+      storeId: c.storeId || null,
+      value: c.value,
+    };
+    if (!c.session && c.expirationDate) o.expirationDate = c.expirationDate;
+    return o;
   });
-
-  const r = results?.[0]?.result;
-  if (!r || r.error) return { error: r?.error || 'Неизвестная ошибка' };
-  return { value: r.id };
+  return { value: JSON.stringify(out, null, 2) };
 }
 
 async function getChatGptSession() {
